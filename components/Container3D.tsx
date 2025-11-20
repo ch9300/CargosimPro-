@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Center, Text, GizmoHelper, GizmoViewport, Html } from '@react-three/drei';
@@ -54,9 +55,10 @@ interface Container3DProps {
   items: PlacedItem[];
   visibleCount: number;
   cog?: Point3D;
+  t: any;
 }
 
-const ContainerFrame: React.FC<{ container: ContainerType }> = ({ container }) => {
+const ContainerFrame: React.FC<{ container: ContainerType; unit: string }> = ({ container, unit }) => {
   const { length, width, height } = container;
   
   return (
@@ -103,7 +105,7 @@ const ContainerFrame: React.FC<{ container: ContainerType }> = ({ container }) =
             anchorX="left" 
             position={[0, 0, 50]}
           >
-            {length} mm
+            {length} {unit}
           </Text>
       </group>
       <group position={[length/2 + 100, -height/2, width/2]}>
@@ -113,7 +115,7 @@ const ContainerFrame: React.FC<{ container: ContainerType }> = ({ container }) =
             rotation={[-Math.PI/2, 0, -Math.PI/2]} 
             anchorX="left"
           >
-            {width} mm
+            {width} {unit}
           </Text>
       </group>
        <group position={[length/2 + 100, 0, -width/2]}>
@@ -123,14 +125,14 @@ const ContainerFrame: React.FC<{ container: ContainerType }> = ({ container }) =
             rotation={[0, 0, 0]} 
             anchorX="center"
           >
-            {height} mm
+            {height} {unit}
           </Text>
       </group>
     </group>
   );
 };
 
-const Parcel: React.FC<{ item: PlacedItem; isNew: boolean }> = ({ item, isNew }) => {
+const Parcel: React.FC<{ item: PlacedItem; isNew: boolean; weightUnit: string }> = ({ item, isNew, weightUnit }) => {
   return (
     <group position={new THREE.Vector3(...item.position)}>
       <mesh castShadow receiveShadow>
@@ -156,14 +158,14 @@ const Parcel: React.FC<{ item: PlacedItem; isNew: boolean }> = ({ item, isNew })
            anchorX="center" 
            anchorY="middle"
          >
-           {item.weight}kg
+           {item.weight}{weightUnit}
          </Text>
       )}
     </group>
   );
 };
 
-const CenterOfGravityMarker: React.FC<{ cog: Point3D }> = ({ cog }) => {
+const CenterOfGravityMarker: React.FC<{ cog: Point3D; label: string }> = ({ cog, label }) => {
   return (
     <group position={[cog.x, cog.y, cog.z]}>
       {/* Visual Marker */}
@@ -173,14 +175,14 @@ const CenterOfGravityMarker: React.FC<{ cog: Point3D }> = ({ cog }) => {
       </mesh>
       <Html position={[0, 200, 0]} center>
          <div className="bg-white/90 px-2 py-1 rounded text-[10px] font-bold text-red-600 border border-red-200 shadow-sm whitespace-nowrap">
-           Center of Gravity
+           {label}
          </div>
       </Html>
     </group>
   )
 }
 
-export const Container3D: React.FC<Container3DProps> = ({ container, items, visibleCount, cog }) => {
+export const Container3D: React.FC<Container3DProps> = ({ container, items, visibleCount, cog, t }) => {
   const maxDim = Math.max(container.length, container.height, container.width);
   const camPos = [maxDim * 1.2, maxDim * 0.8, maxDim * 1.5] as [number, number, number];
 
@@ -209,11 +211,11 @@ export const Container3D: React.FC<Container3DProps> = ({ container, items, visi
 
       <group>
         <Center top>
-            <ContainerFrame container={container} />
+            <ContainerFrame container={container} unit={t.dimUnit} />
             {visibleItems.map((item) => (
-              <Parcel key={item.id} item={item} isNew={true} />
+              <Parcel key={item.id} item={item} isNew={true} weightUnit={t.weightUnit} />
             ))}
-            {cog && visibleCount > 0 && <CenterOfGravityMarker cog={cog} />}
+            {cog && visibleCount > 0 && <CenterOfGravityMarker cog={cog} label={t.centerOfGravity} />}
         </Center>
       </group>
 

@@ -1,6 +1,9 @@
-import React from 'react';
+
+import React, { useRef } from 'react';
 import { CargoItem, ContainerType } from '../types';
-import { Trash2, Plus, Play, RefreshCw, Box, Download, Rotate3D, Settings, Scale, AlertTriangle } from 'lucide-react';
+import { Trash2, Plus, Play, RefreshCw, Box, Download, Rotate3D, Settings, Scale, AlertTriangle, Upload, FileSpreadsheet, Globe } from 'lucide-react';
+import { COLORS } from '../constants';
+import { LANGUAGES, LanguageCode } from '../locales';
 
 interface SidebarProps {
   containers: ContainerType[];
@@ -13,10 +16,14 @@ interface SidebarProps {
   onSimulate: () => void;
   onClear: () => void;
   onDownload: () => void;
+  onImportItems: (items: CargoItem[]) => void;
   isSimulating: boolean;
   gap: number;
   setGap: (val: number) => void;
   weightUtil: number;
+  lang: LanguageCode;
+  setLang: (l: LanguageCode) => void;
+  t: any;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -30,23 +37,139 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSimulate,
   onClear,
   onDownload,
+  onImportItems,
   isSimulating,
   gap,
   setGap,
-  weightUtil
+  weightUtil,
+  lang,
+  setLang,
+  t
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedC = containers.find(c => c.id === selectedContainer);
+
+  const downloadTemplate = () => {
+    const csvContent = "data:text/csv;charset=utf-8,Name,Length(mm),Width(mm),Height(mm),Qty,Weight(kg),AllowRotation(1=Yes 0=No)\nStandard Box,600,400,400,50,20,1";
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "cargo_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const content = e.target?.result as string;
+        const lines = content.split('\n');
+        const newItems: CargoItem[] = [];
+        
+        // Check format: Is this our Report export or our Simple Template?
+        const header = lines[0].toLowerCase();
+        const isReportFormat = header.includes("step") && header.includes("position");
+
+        if (isReportFormat) {
+            // Parse Report Format: We need to aggregate items by Name + Dims
+            // Simple aggregation map
+            const map = new Map<string, CargoItem>();
+            
+            for(let i=1; i<lines.length; i++) {
+                const line = lines[i].trim();
+                if(!line) continue;
+                const cols = line.split(',');
+                // Report format: Step, ID, Name, Dim(LxWxH), Weight, Pos, Vol
+                // cols[2] = Name, cols[3] = Dims, cols[4] = Weight
+                if(cols.length < 5) continue;
+
+                const name = cols[2];
+                const dimStr = cols[3]; // "600x400x300"
+                const weight = parseFloat(cols[4]);
+                
+                const key = name + dimStr + weight;
+                
+                if(map.has(key)) {
+                    const existing = map.get(key)!;
+                    existing.quantity += 1;
+                } else {
+                    const [l,w,h] = dimStr.split('x').map(Number);
+                    map.set(key, {
+                        id: Date.now() + i + '',
+                        name: name,
+                        length: l,
+                        width: w,
+                        height: h,
+                        weight: weight,
+                        quantity: 1,
+                        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                        allowRotation: true
+                    });
+                }
+            }
+            onImportItems(Array.from(map.values()));
+
+        } else {
+            // Parse Template Format
+            for(let i=1; i<lines.length; i++) {
+                const line = lines[i].trim();
+                if(!line) continue;
+                const cols = line.split(',');
+                if(cols.length < 6) continue;
+                
+                newItems.push({
+                    id: Date.now() + i + '',
+                    name: cols[0] || 'Imported Item',
+                    length: parseInt(cols[1]) || 500,
+                    width: parseInt(cols[2]) || 400,
+                    height: parseInt(cols[3]) || 300,
+                    quantity: parseInt(cols[4]) || 1,
+                    weight: parseFloat(cols[5]) || 10,
+                    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                    allowRotation: cols[6] ? parseInt(cols[6]) === 1 : true
+                });
+            }
+            if(newItems.length > 0) onImportItems(newItems);
+        }
+    };
+    reader.readAsText(file);
+    // reset
+    if(fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   return (
     <div className="w-[400px] bg-white border-r border-slate-200 h-full flex flex-col shadow-xl font-sans z-20">
-      <div className="px-6 py-5 border-b border-slate-100 bg-white">
-        <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2 tracking-tight">
-          <div className="bg-blue-600 text-white p-1.5 rounded-md">
-             <Box size={20} />
-          </div>
-          CargoSim <span className="text-blue-600">Pro</span>
-        </h1>
-        <p className="text-xs text-slate-400 mt-1 pl-1">Advanced Load Planning System</p>
+      <div className="px-6 py-5 border-b border-slate-100 bg-white flex justify-between items-start">
+        <div>
+            <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2 tracking-tight">
+            <div className="bg-blue-600 text-white p-1.5 rounded-md">
+                <Box size={20} />
+            </div>
+            {t.title}
+            </h1>
+            <p className="text-xs text-slate-400 mt-1 pl-1">{t.subtitle}</p>
+        </div>
+        {/* Language Selector */}
+        <div className="relative group">
+            <button className="text-slate-400 hover:text-blue-600 transition p-1">
+                <Globe size={20} />
+            </button>
+            <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden hidden group-hover:block z-50">
+                {LANGUAGES.map(l => (
+                    <button 
+                        key={l.code}
+                        onClick={() => setLang(l.code)}
+                        className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 ${lang === l.code ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600'}`}
+                    >
+                        <span className="text-sm">{l.flag}</span> {l.name}
+                    </button>
+                ))}
+            </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50/50">
@@ -55,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <section>
           <div className="flex items-center gap-2 mb-3">
             <span className="bg-slate-200 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">01</span>
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Container Selection</h2>
+            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t.selectContainer}</h2>
           </div>
           <div className="grid grid-cols-1 gap-2">
             {containers.map(c => (
@@ -73,8 +196,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {selectedContainer === c.id && <div className="w-2 h-2 bg-blue-500 rounded-full"></div>}
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                  <span>{c.length}x{c.width}x{c.height}mm</span>
-                  <span>Max: {(c.maxWeight/1000).toFixed(1)}T</span>
+                  <span>{c.length}x{c.width}x{c.height}{t.dimUnit}</span>
+                  <span>{t.max}: {(c.maxWeight/1000).toFixed(1)}t</span>
                 </div>
               </button>
             ))}
@@ -86,11 +209,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Settings size={14} className="text-slate-400" />
-                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Parameters</h2>
+                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t.parameters}</h2>
               </div>
            </div>
            <div className="flex items-center justify-between gap-4">
-              <label className="text-xs text-slate-600 font-medium">Stacking Gap (mm)</label>
+              <label className="text-xs text-slate-600 font-medium">{t.stackingGap} ({t.dimUnit})</label>
               <div className="flex items-center">
                 <input 
                     type="number" 
@@ -106,7 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
          {weightUtil > 0 && (
            <section className={`p-4 rounded-xl border shadow-sm ${weightUtil > 100 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
               <div className="flex justify-between items-center mb-1">
-                 <span className={`text-xs font-bold ${weightUtil > 100 ? 'text-red-700' : 'text-emerald-700'}`}>Weight Load</span>
+                 <span className={`text-xs font-bold ${weightUtil > 100 ? 'text-red-700' : 'text-emerald-700'}`}>{t.weightUtil}</span>
                  <span className={`text-xs font-mono font-bold ${weightUtil > 100 ? 'text-red-700' : 'text-emerald-700'}`}>{weightUtil.toFixed(1)}%</span>
               </div>
               <div className="w-full bg-white rounded-full h-2 overflow-hidden">
@@ -117,7 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               {weightUtil > 100 && (
                   <div className="flex items-center gap-1 mt-2 text-[10px] text-red-600 font-bold">
-                      <AlertTriangle size={12} /> Overweight! Items may be rejected.
+                      <AlertTriangle size={12} /> {t.overweightWarning}
                   </div>
               )}
            </section>
@@ -128,15 +251,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex justify-between items-center mb-3">
             <div className="flex items-center gap-2">
                 <span className="bg-slate-200 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">02</span>
-                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Cargo Manifest</h2>
+                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t.cargoManifest}</h2>
             </div>
             <button 
               onClick={onClear}
               className="text-[11px] font-medium text-slate-500 hover:text-red-600 transition flex items-center gap-1 px-2 py-1 rounded hover:bg-red-50"
             >
-              Reset List
+              {t.resetList}
             </button>
           </div>
+
+           {/* Import/Export Actions */}
+           <div className="grid grid-cols-2 gap-2 mb-4">
+               <input 
+                 type="file" 
+                 ref={fileInputRef}
+                 accept=".csv"
+                 className="hidden"
+                 onChange={handleFileUpload}
+               />
+               <button 
+                 onClick={() => fileInputRef.current?.click()}
+                 className="flex justify-center items-center gap-2 py-2 border border-slate-200 bg-white text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-50 hover:text-blue-600 transition"
+               >
+                   <Upload size={12} /> {t.importCSV}
+               </button>
+               <button 
+                 onClick={downloadTemplate}
+                 className="flex justify-center items-center gap-2 py-2 border border-slate-200 bg-white text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-50 hover:text-blue-600 transition"
+               >
+                   <FileSpreadsheet size={12} /> {t.getTemplate}
+               </button>
+           </div>
           
           <div className="space-y-3">
             {items.map((item, idx) => (
@@ -161,7 +307,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         value={item.name}
                         onChange={(e) => onUpdateItem(idx, 'name', e.target.value)}
                         className="block w-full text-sm font-bold text-slate-700 bg-transparent border-none p-0 focus:ring-0 placeholder-slate-300"
-                        placeholder="Item Name"
+                        placeholder={t.itemName}
                         />
                          <span className="text-[10px] text-slate-400 font-mono">ID: {item.id}</span>
                     </div>
@@ -204,7 +350,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     />
                   </div>
                   <div className="col-span-1">
-                    <label className="text-[9px] uppercase font-bold text-blue-600 block mb-1">Qty</label>
+                    <label className="text-[9px] uppercase font-bold text-blue-600 block mb-1">{t.qty}</label>
                     <input 
                       type="number" 
                       value={item.quantity}
@@ -217,7 +363,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                  {/* Weight Row */}
                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="col-span-1 relative">
-                         <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">Weight (kg)</label>
+                         <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">{t.weight} ({t.weightUnit})</label>
                          <input 
                           type="number" 
                           value={item.weight}
@@ -242,7 +388,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${item.allowRotation ? 'translate-x-4' : 'translate-x-0'}`}></div>
                       </div>
                       <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
-                         <Rotate3D size={12} /> Allow Rotation
+                         <Rotate3D size={12} /> {t.allowRotation}
                       </span>
                    </label>
                 </div>
@@ -253,7 +399,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={onAddItem}
               className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 text-xs font-bold uppercase tracking-wide transition flex justify-center items-center gap-2"
             >
-              <Plus size={16} /> Add Item
+              <Plus size={16} /> {t.addItem}
             </button>
           </div>
         </section>
@@ -268,11 +414,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           {isSimulating ? (
              <>
-              <RefreshCw size={18} className="animate-spin" /> Calculating...
+              <RefreshCw size={18} className="animate-spin" /> {t.calculating}
              </>
           ) : (
              <>
-              <Play size={18} fill="currentColor" /> Generate Load Plan
+              <Play size={18} fill="currentColor" /> {t.generatePlan}
              </>
           )}
         </button>
@@ -282,7 +428,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           disabled={isSimulating || items.length === 0}
           className="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold py-2.5 rounded-xl transition flex justify-center items-center gap-2 text-xs shadow-sm"
         >
-          <Download size={14} /> Export Report (.CSV)
+          <Download size={14} /> {t.exportReport}
         </button>
       </div>
     </div>

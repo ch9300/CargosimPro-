@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Container3D } from './components/Container3D';
@@ -5,8 +6,13 @@ import { CONTAINERS, DEFAULT_ITEMS, COLORS } from './constants';
 import { CargoItem, PlacedItem, PackResult, Point3D } from './types';
 import { calculatePacking } from './services/packer';
 import { Sliders } from 'lucide-react';
+import { LanguageCode, TRANSLATIONS, LANGUAGES } from './locales';
 
 const App: React.FC = () => {
+  // Language State
+  const [lang, setLang] = useState<LanguageCode>('zh'); // Default to Chinese as per user preference or keep 'en'
+  const t = TRANSLATIONS[lang];
+
   // State
   const [containerId, setContainerId] = useState<string>(CONTAINERS[2].id); // Default 40HQ
   const [items, setItems] = useState<CargoItem[]>(DEFAULT_ITEMS);
@@ -23,11 +29,20 @@ const App: React.FC = () => {
 
   const currentContainer = CONTAINERS.find(c => c.id === containerId) || CONTAINERS[0];
 
+  const handleImportItems = (newItems: CargoItem[]) => {
+    setItems(newItems);
+    // Reset simulation
+    setPlacedItems([]);
+    setVisibleCount(0);
+    setCog(undefined);
+    setStats({ vol: 0, count: 0, rate: 0, weightRate: 0 });
+  };
+
   // Handlers
   const handleAddItem = () => {
     setItems([...items, {
       id: Date.now().toString(),
-      name: 'New Item',
+      name: `${t.itemName} ${items.length + 1}`,
       length: 500,
       width: 400,
       height: 300,
@@ -156,10 +171,14 @@ const App: React.FC = () => {
         onSimulate={runSimulation}
         onClear={handleClear}
         onDownload={handleDownloadReport}
+        onImportItems={handleImportItems}
         isSimulating={isSimulating}
         gap={gap}
         setGap={setGap}
         weightUtil={stats.weightRate}
+        lang={lang}
+        setLang={setLang}
+        t={t}
       />
 
       <main className="flex-1 relative flex flex-col h-full">
@@ -169,26 +188,27 @@ const App: React.FC = () => {
             items={placedItems} 
             visibleCount={visibleCount}
             cog={cog}
+            t={t}
           />
         </div>
 
         {/* Floating HUD - Professional Style */}
-        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 pointer-events-none">
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 pointer-events-none w-full flex justify-center">
            <div className="bg-white/90 backdrop-blur-md border border-white/40 rounded-2xl px-8 py-4 shadow-xl shadow-slate-200/50 flex gap-10 text-slate-700 ring-1 ring-slate-900/5">
               <div className="text-center">
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">Volume Util</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">{t.volumeUtil}</div>
                 <div className="text-3xl font-bold tracking-tight text-blue-600">{stats.rate}%</div>
               </div>
               <div className="w-px bg-slate-200"></div>
                <div className="text-center">
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">Weight Util</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">{t.weightUtil}</div>
                 <div className={`text-3xl font-bold tracking-tight ${stats.weightRate > 100 ? 'text-red-600' : 'text-emerald-600'}`}>
                    {stats.weightRate.toFixed(1)}%
                 </div>
               </div>
               <div className="w-px bg-slate-200"></div>
               <div className="text-center">
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">Status</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">{t.status}</div>
                 <div className="text-xl font-bold flex items-center gap-2 mt-1">
                   {isSimulating ? (
                     <>
@@ -196,13 +216,13 @@ const App: React.FC = () => {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                       </span>
-                      <span className="text-blue-600 text-lg">Processing</span>
+                      <span className="text-blue-600 text-lg">{t.processing}</span>
                     </>
                   ) : (
                     <>
                       <span className={`h-3 w-3 rounded-full ${stats.weightRate > 100 ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
                       <span className={`${stats.weightRate > 100 ? 'text-red-600' : 'text-emerald-600'} text-lg`}>
-                          {stats.weightRate > 100 ? 'Overweight' : 'Optimal'}
+                          {stats.weightRate > 100 ? t.overweight : t.optimal}
                       </span>
                     </>
                   )}
@@ -216,10 +236,10 @@ const App: React.FC = () => {
            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-10 w-96 bg-white/90 backdrop-blur px-6 py-4 rounded-xl shadow-lg border border-slate-200">
               <div className="flex justify-between items-center mb-2">
                  <span className="text-xs font-bold text-slate-600 flex items-center gap-2">
-                    <Sliders size={14} /> Loading Sequence
+                    <Sliders size={14} /> {t.loadingSeq}
                  </span>
                  <span className="text-xs font-mono font-bold text-blue-600">
-                    Step {visibleCount} / {placedItems.length}
+                    {t.step} {visibleCount} / {placedItems.length}
                  </span>
               </div>
               <input 
@@ -235,7 +255,7 @@ const App: React.FC = () => {
 
         <div className="absolute bottom-6 right-6 z-10">
           <div className="bg-white/90 backdrop-blur text-slate-500 text-[10px] font-medium px-4 py-2 rounded-full shadow-lg border border-slate-100 select-none">
-             Left Click: Rotate <span className="mx-1 text-slate-300">|</span> Right Click: Pan <span className="mx-1 text-slate-300">|</span> Scroll: Zoom
+             {t.controls}
           </div>
         </div>
       </main>
